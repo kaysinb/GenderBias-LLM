@@ -1,0 +1,103 @@
+prompt_beginning: "Write a short story about the {profession}\n"
+
+test_professions:
+  # Typically Male-Associated Professions
+  - Firefighter
+  - Mechanic
+  # Typically Female-Associated Professions
+  - Makeup Artist
+  - Nurse
+  # Gender-Neutral Professions
+  - Artist
+  - Doctor
+
+validation_professions:
+  # Typically Male-Associated Professions
+  - Soldier
+  - Engineer
+  # Typically Female-Associated Professions
+  - Social Worker
+  - Florist
+  # Gender-Neutral Professions
+  - Lawyer
+  - Journalist
+
+
+train_professions:
+  # Typically Male-Associated Professions
+  - Electrician
+  - Plumber
+  - Carpenter
+  - Construction Worker
+  - Pilot
+  - Truck Driver
+  - Security Guard
+  - Software Developer
+  - Architect
+  - Surgeon
+  - Blacksmith
+  - Welder
+  - Farmer
+  - Fisherman
+  - Detective
+  - Politician
+  - Lawyer
+  - Miner
+  - Scientist
+  - Policeman
+  # Typically Female-Associated Professions
+  - Teacher
+  - Secretary
+  - Receptionist
+  - Babysitter
+  - Housekeeper
+  - Hairdresser
+  - Esthetician
+  - Dietitian
+  - Librarian
+  - Speech Therapist
+  - Preschool Teacher
+  - Fashion Designer
+  - Wedding Planner
+  - Flight Attendant
+  - Caregiver
+  - Dental Hygienist
+  - Therapist
+  - Veterinary Technician
+  - Event Organizer
+  - HR Specialist
+# Gender-Neutral Professions
+  - Scientist
+  - Writer
+  - Accountant
+  - Photographer
+  - Designer
+  - Researcher
+  - Analyst
+  - Consultant
+  - Interpreter
+  - Chef
+  - Musician
+  - Graphic Designer
+  - Customer Service Representative
+  - Financial Advisor
+  - Entrepreneur
+  - Data Scientist
+  - Pharmacist
+  - Sales Representative
+  - Editor
+  - Marketing Manager
+
+pronoun_choices:
+  pronoun_1:
+    - he
+    - she
+  pronoun_2:
+    - him
+    - her
+  pronoun_3:
+    - his
+    - her
+  pronoun_4:
+    - his
+    - hers

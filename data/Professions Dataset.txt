@@ -1,0 +1,17 @@
+The {profession} said that {pronoun_1}
+The {profession} yelled that {pronoun_1}
+The {profession} whispered that {pronoun_1}
+The {profession} wanted that {pronoun_1}
+The {profession} desired that {pronoun_1}
+The {profession} wished that {pronoun_1}
+The {profession} ate because {pronoun_1}
+The {profession} ran because {pronoun_1}
+The {profession} drove because {pronoun_1}
+The {profession} slept because {pronoun_1}
+The {profession} cried because {pronoun_1}
+The {profession} laughed because {pronoun_1}
+The {profession} went home because {pronoun_1}
+The {profession} stayed up because {pronoun_1}
+The {profession} was fired because {pronoun_1}
+The {profession} was promoted because {pronoun_1}
+The {profession} yelled because {pronoun_1}

@@ -1,0 +1,3 @@
+local_generative_model_name: "Qwen/Qwen2.5-0.5B-Instruct"
+chatgpt_generative_model_name: "gpt-4o-2024-11-20"
+gpt_model_to_check_gender: "gpt-4o-2024-11-20"

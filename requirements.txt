@@ -1,0 +1,10 @@
+datasets==3.2.0
+matplotlib==3.10.0
+numpy==2.2.1
+openai==1.58.1
+pandas==2.2.3
+peft==0.14.0
+python-dotenv==1.0.1
+torch==2.5.1
+transformers==4.47.1
+wandb==0.19.2
