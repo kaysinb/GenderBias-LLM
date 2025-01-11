@@ -69,16 +69,14 @@ class BiasEvaluator:
         return profession, partial_results
 
 
-def concurrent_bias_evaluation(generation_config, process_profession_function, generate_story_function):
+def concurrent_bias_evaluation(professions, n_samples, process_profession_function, generate_story_function):
     result_dict = defaultdict(list)
-    max_workers = min(len(generation_config["professions"]), 6)
+    max_workers = min(len(professions), 6)
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submit one task per profession
         futures = [
-            executor.submit(
-                process_profession_function, profession, generation_config["n_samples"], generate_story_function
-            )
-            for profession in generation_config["professions"]
+            executor.submit(process_profession_function, profession, n_samples, generate_story_function)
+            for profession in professions
         ]
 
         # Gather results as they are completed

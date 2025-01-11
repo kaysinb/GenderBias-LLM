@@ -18,7 +18,7 @@ class GenderLossTrainer(Trainer):
         self.lambda_gender = kwargs.pop("lambda_gender", 1.0)
         super().__init__(*args, **kwargs)
 
-    def compute_loss(self, model, inputs, **kwargs):
+    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
         """
         Overrides the default compute_loss to incorporate your custom `gender_loss`.
         Accepts arbitrary keyword arguments to maintain compatibility.
@@ -36,17 +36,19 @@ class GenderLossTrainer(Trainer):
                 inputs_standard["attention_mask"].append(msk)
 
         loss_standard = 0
+        outputs_standard = None
         if len(inputs_standard["input_ids"]) > 0:
             stacked_standard = {key: torch.stack(value) for key, value in inputs_standard.items()}
-            loss_standard = super().compute_loss(model, stacked_standard, return_outputs=False, **kwargs)
+            loss_standard = super().compute_loss(model, stacked_standard, return_outputs=return_outputs, **kwargs)
             if isinstance(loss_standard, tuple):
                 loss_standard = loss_standard[0]
+                outputs_standard = loss_standard[1]
             self.standard_loss_logs.append(loss_standard.item())
 
         loss_gender = 0
         if len(inputs_gender["input_ids"]) > 0:
             stacked_gender = {key: torch.stack(value) for key, value in inputs_gender.items()}
-            loss_gender = self.custom_compute_loss(model, stacked_gender, return_outputs=False, **kwargs)
+            loss_gender = self.custom_compute_loss(model, stacked_gender, **kwargs)
             if isinstance(loss_gender, tuple):
                 loss_gender = loss_gender[0]
             self.gender_loss_logs.append(loss_gender.item())
@@ -61,7 +63,7 @@ class GenderLossTrainer(Trainer):
             self.log({"gender_loss": np.mean(self.gender_loss_logs).item()})
             self.gender_loss_logs = []
 
-        return loss
+        return loss if not return_outputs else (loss, outputs_standard)
 
     def custom_compute_loss(self, model, inputs, return_outputs=False, **kwargs):
         labels = inputs.pop("labels")
@@ -102,7 +104,7 @@ class GenderLossTrainer(Trainer):
         p_male = probs[torch.arange(probs.size(0)), ids_male]  # [batch_size]
         p_female = probs[torch.arange(probs.size(0)), ids_female]  # [batch_size]
 
-        diff_loss = ((p_male - p_female) / (p_male + p_female + 1e-6)) ** 2
+        diff_loss = ((p_male - p_female) / (p_male + p_female + 1e-6) ** 1.3) ** 2
         self.p_total_logs.append((p_male + p_female).mean().item())
 
         return diff_loss.mean()
@@ -114,3 +116,47 @@ class GenderLossTrainer(Trainer):
         # Access the global step from the Trainer's state
         global_step = self.state.global_step
         return self.args.logging_steps > 0 and global_step % self.args.logging_steps == 0
+
+    def evaluate(self, eval_dataset=None, ignore_keys=None, metric_key_prefix: str = "eval"):
+        """
+        Overrides the default evaluate method to compute loss using custom compute loss.
+        """
+        self.p_total_logs = []
+
+        if eval_dataset is None:
+            eval_dataset = self.eval_dataset
+
+        eval_dataloader = torch.utils.data.DataLoader(
+            eval_dataset,
+            batch_size=self.args.eval_batch_size,
+            collate_fn=self.data_collator,
+            num_workers=self.args.dataloader_num_workers,
+            pin_memory=self.args.dataloader_pin_memory,
+        )
+
+        # Initialize metrics
+        total_loss = 0
+        num_batches = 0
+
+        model = self._wrap_model(self.model, training=False)
+        model.eval()
+
+        for step, inputs in enumerate(eval_dataloader):
+            # Move inputs to the model's device
+            inputs = {k: v.to(model.device) if hasattr(v, "to") else v for k, v in inputs.items()}
+
+            with torch.no_grad():
+                loss = self.custom_compute_loss(model, inputs)
+
+            total_loss += loss.item()
+            num_batches += 1
+
+        eval_metrics = {
+            f"{metric_key_prefix}_loss": total_loss / num_batches,
+            f"{metric_key_prefix}_p_total": np.mean(self.p_total_logs).item(),
+        }
+
+        self.log(eval_metrics)
+        self.p_total_logs = []
+
+        return eval_metrics
