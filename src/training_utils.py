@@ -63,7 +63,7 @@ class GenderLossTrainer(Trainer):
             self.log({"gender_loss": np.mean(self.gender_loss_logs).item()})
             self.gender_loss_logs = []
 
-        return loss if not return_outputs else (loss, outputs_standard)
+        return (loss, outputs_standard) if return_outputs else loss
 
     def custom_compute_loss(self, model, inputs, return_outputs=False, **kwargs):
         labels = inputs.pop("labels")
@@ -115,7 +115,7 @@ class GenderLossTrainer(Trainer):
         """
         # Access the global step from the Trainer's state
         global_step = self.state.global_step
-        return self.args.logging_steps > 0 and global_step % self.args.logging_steps == 0
+        return self.args.logging_steps > 0 and global_step % self.args.logging_steps == 0 and global_step > 1
 
     def evaluate(self, eval_dataset=None, ignore_keys=None, metric_key_prefix: str = "eval"):
         """
@@ -147,6 +147,8 @@ class GenderLossTrainer(Trainer):
 
             with torch.no_grad():
                 loss = self.custom_compute_loss(model, inputs)
+                if isinstance(loss, tuple):
+                    loss = loss[0]
 
             total_loss += loss.item()
             num_batches += 1
