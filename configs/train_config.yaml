@@ -15,3 +15,4 @@ lora_train_config:
     end: 2
 
 lambda_gender: 0.5
+p_total_power: 1.4

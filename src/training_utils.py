@@ -16,6 +16,7 @@ class GenderLossTrainer(Trainer):
         self.gender_loss_logs = []
         self.gender_ds_extra_id = kwargs.pop("gender_ds_extra_id", -777)
         self.lambda_gender = kwargs.pop("lambda_gender", 1.0)
+        self.p_total_power = kwargs.pop("p_total_power", 1.0)
         super().__init__(*args, **kwargs)
 
     def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
@@ -104,7 +105,7 @@ class GenderLossTrainer(Trainer):
         p_male = probs[torch.arange(probs.size(0)), ids_male]  # [batch_size]
         p_female = probs[torch.arange(probs.size(0)), ids_female]  # [batch_size]
 
-        diff_loss = ((p_male - p_female) / (p_male + p_female + 1e-6) ** 1.3) ** 2
+        diff_loss = ((p_male - p_female) / (p_male + p_female + 1e-6) ** self.p_total_power) ** 2
         self.p_total_logs.append((p_male + p_female).mean().item())
 
         return diff_loss.mean()
