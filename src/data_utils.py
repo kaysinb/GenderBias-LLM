@@ -1,5 +1,6 @@
 from .utils import read_config
 from datasets import Dataset, DatasetDict
+import os
 
 
 def txt_file_to_list(file_path):
@@ -56,13 +57,14 @@ def build_context_pronoun_list(templates, professions, pronoun_choices, prompt_b
     return contexts, pronoun_lists
 
 
-def prepare_dataset(
+def prepare_dataset_gender(
     dataset_config_path,
     template_path,
     train_share=0.8,
     validation_share=0.1,
     space_symbol="Ġ",
     print_dataset_info=False,
+    reduced_number_of_train_templates=None,
 ):
     """
     Reads config & templates, splits them, then builds a DatasetDict
@@ -84,6 +86,8 @@ def prepare_dataset(
     test_beginning = int(templates_num * (train_share + validation_share))
 
     train_templates = templates[:validation_beginning]
+    if reduced_number_of_train_templates:
+        train_templates = train_templates[:reduced_number_of_train_templates]
     validation_templates = templates[validation_beginning:test_beginning]
     test_templates = templates[test_beginning:]
 
@@ -141,4 +145,26 @@ def prepare_dataset(
         }
     )
 
+    return dataset_dict
+
+
+def prepare_dataset_gender_stories(stories_path, reduced_number_of_stories_per_profession=None):
+    file_paths = os.listdir(stories_path)
+    instructions_list = []
+    responses_list = []
+    instruction_template = "Write a short story about the {profession}."
+    for file_path in file_paths:
+        with open(os.path.join(stories_path, file_path), "r") as f:
+            stories = f.read().splitlines()
+        stories = [story.strip() for story in stories if len(story) > 10]
+
+        if reduced_number_of_stories_per_profession:
+            stories = stories[:reduced_number_of_stories_per_profession]
+
+        profession = file_path.split("_")[0].replace("-", " ")
+        instructions_list.extend([instruction_template.format(profession=profession)] * len(stories))
+        responses_list.extend(stories)
+
+    dataset = Dataset.from_dict({"instruction": instructions_list, "response": responses_list})
+    dataset_dict = DatasetDict({"train": dataset})
     return dataset_dict

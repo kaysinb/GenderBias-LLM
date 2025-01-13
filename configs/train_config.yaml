@@ -1,5 +1,5 @@
 lora_train_config:
-  r: 12
+  r: 8
   lora_alpha: 32
   lora_dropout: 0.05
   bias: "none"
@@ -14,5 +14,5 @@ lora_train_config:
     start: 0
     end: 2
 
-lambda_gender: 0.5
-p_total_power: 1.4
+lambda_gender: 1.5
+p_total_power: 1.3
