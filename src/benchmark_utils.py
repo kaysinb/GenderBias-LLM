@@ -1,8 +1,16 @@
 import torch
 import numpy as np
+from typing import Any, Dict, Iterable
+from transformers import PreTrainedTokenizerBase
 
 
-def evaluate_copa(model, tokenizer, dataset):
+def evaluate_copa(
+    model: torch.nn.Module, tokenizer: PreTrainedTokenizerBase, dataset: Iterable[Dict[str, Any]]
+) -> float:
+    """
+    Evaluates the model's accuracy on the COPA (Choice of Plausible Alternatives) dataset
+    by comparing the model's predictions against the correct labels.
+    """
     correct = 0
     total = 0
 
@@ -32,36 +40,39 @@ def evaluate_copa(model, tokenizer, dataset):
     return correct / total
 
 
-def compute_choice_score(model, tokenizer, prompt, choice_text):
+def compute_choice_score(
+    model: torch.nn.Module, tokenizer: PreTrainedTokenizerBase, prompt: str, choice_text: str
+) -> float:
     """
-    Computes negative log-likelihood of `choice_text` given the `prompt`.
-    We'll return *log-prob* (the higher, the more likely).
+    Calculates the negative log-likelihood (as a score) of a given choice text based on a prompt. This score indicates
+    how likely the model considers the choice text as a continuation of the prompt.
     """
     device = next(model.parameters()).device
 
-    # Combine the prompt and choice
     full_text = prompt + " " + choice_text
 
-    # Tokenize
-    inputs = tokenizer(full_text, return_tensors="pt")
-    input_ids = inputs["input_ids"].to(device)
-    attention_mask = inputs["attention_mask"].to(device)
+    inputs = tokenizer(full_text, return_tensors="pt").to(device)
+    input_ids = inputs["input_ids"]
+    attention_mask = inputs["attention_mask"]
 
-    # We'll use the model's causal LM head to get the total loss
     with torch.no_grad():
         outputs = model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            labels=input_ids,  # computing cross-entropy over the entire sequence
+            labels=input_ids,
         )
-        loss = outputs.loss.item()  # average cross-entropy over all tokens
+        loss = outputs.loss.item()
 
-    # Return negative loss as "score"
-    # A higher score => lower cross-entropy => better fit
     return -loss
 
 
-def evaluate_piqa(model, tokenizer, dataset):
+def evaluate_piqa(
+    model: torch.nn.Module, tokenizer: PreTrainedTokenizerBase, dataset: Iterable[Dict[str, Any]]
+) -> float:
+    """
+    Assesses the model's performance on the PIQA (Physical Interaction: Question Answering) dataset
+    by determining the accuracy of the model's selected solutions.
+    """
     correct = 0
     total = 0
 
@@ -69,16 +80,13 @@ def evaluate_piqa(model, tokenizer, dataset):
         goal = example["goal"]
         sol1 = example["sol1"]
         sol2 = example["sol2"]
-        label = example["label"]  # 0 or 1
+        label = example["label"]
 
-        # Construct a simple prompt. For instance:
         prompt = f"Question: {goal}\nAnswer:"
 
-        # Score each solution
         score_sol1 = compute_choice_score(model, tokenizer, prompt, sol1)
         score_sol2 = compute_choice_score(model, tokenizer, prompt, sol2)
 
-        # Predict choice: whichever has higher log-prob
         pred_label = 0 if score_sol1 > score_sol2 else 1
 
         if pred_label == label:
@@ -89,15 +97,14 @@ def evaluate_piqa(model, tokenizer, dataset):
     return accuracy
 
 
-def evaluate_lambada_next_token_accuracy(model, tokenizer, dataset, max_eval_samples=None):
+def evaluate_lambada_next_token_accuracy(
+    model: torch.nn.Module,
+    tokenizer: PreTrainedTokenizerBase,
+    dataset: Iterable[Dict[str, Any]],
+) -> float:
     """
-    For each example, we:
-      1. Tokenize the entire text.
-      2. Separate the last token as the 'target'.
-      3. Feed the preceding tokens (context) into the model.
-      4. Let the model predict the next token (top-1).
-      5. Check if it matches the actual last token.
-    Returns accuracy (#correct / #total).
+    Measures the model's ability to predict the next token in the LAMBADA dataset by comparing
+    the model's predicted token against the actual next token in the text.
     """
     device = next(model.parameters()).device
 
@@ -106,33 +113,24 @@ def evaluate_lambada_next_token_accuracy(model, tokenizer, dataset, max_eval_sam
 
     for i, example in enumerate(dataset):
         text = example["text"].strip()
-        # Convert text to token IDs
         tokens = tokenizer.encode(text)
         if len(tokens) < 2:
-            # If the text is too short (only 1 token), skip
             continue
 
-        context_ids = tokens[:-1]  # all but last token
-        target_id = tokens[-1]  # last token
+        context_ids = tokens[:-1]
+        target_id = tokens[-1]
 
-        # Convert to tensors
         context_ids = torch.tensor([context_ids], dtype=torch.long, device=device)
         target_id = torch.tensor([target_id], dtype=torch.long, device=device)
 
         with torch.no_grad():
             outputs = model(context_ids)
-            # outputs.logits shape: (batch, seq_len, vocab_size)
-            # We want the last hidden state from the final token in context
-            logits_last = outputs.logits[:, -1, :]  # shape: (batch=1, vocab_size)
-            pred_id = torch.argmax(logits_last, dim=-1)  # top-1 token index
+            logits_last = outputs.logits[:, -1, :]
+            pred_id = torch.argmax(logits_last, dim=-1)
 
         if pred_id.item() == target_id.item():
             correct += 1
         total += 1
-
-        # Optionally limit number of evaluated samples
-        if max_eval_samples is not None and (i + 1) >= max_eval_samples:
-            break
 
     accuracy = correct / total if total > 0 else 0.0
     return accuracy

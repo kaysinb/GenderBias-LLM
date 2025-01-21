@@ -8,16 +8,36 @@ import torch
 import concurrent.futures
 from collections import defaultdict
 from openai import RateLimitError
+from typing import Any, Dict, List, Optional, Union, Tuple
+from transformers import PreTrainedTokenizerBase
+from openai import OpenAI
 
 
-def read_config(path):
+def read_config(path: str) -> Dict[str, Any]:
+    """
+    Reads a YAML configuration file from the specified path.
+    """
     with open(path) as f:
         config = yaml.load(f, Loader=yaml.SafeLoader)
     return config
 
 
 class LocalLLMGenerator:
-    def __init__(self, model, tokenizer, prompt_story_generation, max_length=200, max_batch_size=20):
+    """
+    A generator class for creating stories using a local language model.
+    """
+
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        tokenizer: PreTrainedTokenizerBase,
+        prompt_story_generation: str,
+        max_length: int = 200,
+        max_batch_size: int = 20,
+    ) -> None:
+        """
+        Initializes the LocalLLMGenerator with the provided model, tokenizer, and prompt.
+        """
         self.model = model
         self.tokenizer = tokenizer
         self.prompt_story_generation = prompt_story_generation
@@ -26,7 +46,10 @@ class LocalLLMGenerator:
         self.max_length = max_length
         self.max_batch_size = max_batch_size
 
-    def generate_story(self, profession, n_samples):
+    def generate_story(self, profession: str, n_samples: int) -> List[str]:
+        """
+        Generates a specified number of stories for a given profession.
+        """
         prompt_story_generation_filled = self.prompt_story_generation.format(profession=profession)
         inputs = self.tokenizer(prompt_story_generation_filled, return_tensors="pt").to(self.device)
         all_outputs = []
@@ -37,7 +60,6 @@ class LocalLLMGenerator:
                 outputs = self.model.generate(**inputs, max_length=self.max_length, num_return_sequences=batch_size)
 
             prompt_len = len(prompt_story_generation_filled)
-            # story_response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)[prompt_len:]
             story_response = [
                 self.tokenizer.decode(outputs[i], skip_special_tokens=True)[prompt_len:] for i in range(batch_size)
             ]
@@ -47,13 +69,29 @@ class LocalLLMGenerator:
 
 
 class BiasEvaluator:
-    def __init__(self, openai_client, gpt_model_to_check_gender, prompt_gender_detection, save_path=None):
+    """
+    A class to evaluate gender bias in generated stories using OpenAI's GPT models.
+    """
+
+    def __init__(
+        self,
+        openai_client: OpenAI,
+        gpt_model_to_check_gender: str,
+        prompt_gender_detection: str,
+        save_path: Optional[str] = None,
+    ) -> None:
+        """
+        Initializes the BiasEvaluator with the provided OpenAI client and configurations.
+        """
         self.openai_client = openai_client
         self.gpt_model_to_check_gender = gpt_model_to_check_gender
         self.prompt_gender_detection = prompt_gender_detection
         self.save_path = save_path
 
-    def check_gender(self, profession, story_response):
+    def check_gender(self, profession: str, story_response: str) -> Union[str, None]:
+        """
+        Checks the gender representation in a given story response.
+        """
         prompt_filled = self.prompt_gender_detection.format(profession=profession, story_response=story_response)
         chat_completion = self.openai_client.chat.completions.create(
             messages=[
@@ -66,7 +104,12 @@ class BiasEvaluator:
         )
         return chat_completion.choices[0].message.content
 
-    def process_profession(self, profession, n_samples, generate_story_function):
+    def process_profession(
+        self, profession: str, n_samples: int, generate_story_function: Any
+    ) -> Tuple[str, List[str]]:
+        """
+        Processes a single profession by generating stories and evaluating their gender bias.
+        """
         file_path = None
         if self.save_path:
             os.makedirs(self.save_path, exist_ok=True)
@@ -88,15 +131,25 @@ class BiasEvaluator:
                 df.to_csv(file_path, index=False)
 
         print(f"Evaluating {profession}")
+        fails_counter = 0
         counter = 0
         partial_results = []
         while counter < len(story_responses):
             try:
                 story_response = story_responses[counter]
                 gender_response = self.check_gender(profession, story_response)
-                gender_response = gender_response.strip().lower()
-                partial_results.append(gender_response)
-                counter += 1
+                if gender_response is not None:
+                    gender_response = gender_response.strip().lower()
+                    partial_results.append(gender_response)
+                    counter += 1
+                    fails_counter = 0
+                else:
+                    fails_counter += 1
+                    if fails_counter > 5:
+                        print(f"Failed to get gender response for {profession}. Skipping...")
+                        partial_results.append("ns")
+                        counter += 1
+                        fails_counter = 0
             except RateLimitError:
                 print(f"Rate limit error for {profession}. Retrying...")
                 time.sleep(5)
@@ -109,8 +162,15 @@ class BiasEvaluator:
 
 
 def concurrent_bias_evaluation(
-    professions, n_samples, process_profession_function, generate_story_function, max_workers=6
-):
+    professions: List[str],
+    n_samples: int,
+    process_profession_function: Any,
+    generate_story_function: Any,
+    max_workers: int = 6,
+) -> Dict[str, List[str]]:
+    """
+    Evaluates gender bias concurrently across multiple professions.
+    """
     result_dict = defaultdict(list)
     max_workers = min(len(professions), max_workers)
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -128,25 +188,24 @@ def concurrent_bias_evaluation(
     return result_dict
 
 
-def plot_gender_distribution(profession_distribution_dict, path_to_save=None, show_plot=True):
+def plot_gender_distribution(
+    profession_distribution_dict: Dict[str, List[str]], path_to_save: Optional[str] = None, show_plot: bool = True
+) -> None:
     """
-    Plot the gender distribution of professions.
+    Plots the gender distribution of professions as a stacked bar chart.
     """
     professions = sorted(list(profession_distribution_dict.keys()))
     male_counts = [profession_distribution_dict[prof].count("male") for prof in professions]
     female_counts = [profession_distribution_dict[prof].count("female") for prof in professions]
     neutral_counts = [profession_distribution_dict[prof].count("neutral") for prof in professions]
 
-    # Calculate percentages
     n_samples = [i + j + k for i, j, k in zip(male_counts, female_counts, neutral_counts)]
     male_percent = [(count / n_sample) * 100 for count, n_sample in zip(male_counts, n_samples)]
     female_percent = [(count / n_sample) * 100 for count, n_sample in zip(female_counts, n_samples)]
     neutral_percent = [(count / n_sample) * 100 for count, n_sample in zip(neutral_counts, n_samples)]
 
-    # Plotting
     x = np.arange(len(professions))
-    width = 0.6  # Increased width for smaller distance between bars
-
+    width = 0.6
     fig, ax = plt.subplots(figsize=(10, 7))
 
     ax.bar(x, male_percent, width, label="male")
@@ -154,8 +213,6 @@ def plot_gender_distribution(profession_distribution_dict, path_to_save=None, sh
     ax.bar(x, neutral_percent, width, bottom=np.array(male_percent) + np.array(female_percent), label="neutral")
 
     fontsize = 12
-
-    # Adding percentage labels on top of each segment
     for i in range(len(professions)):
         if male_percent[i] > 0:
             ax.text(

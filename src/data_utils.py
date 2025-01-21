@@ -1,54 +1,52 @@
 from .utils import read_config
 from datasets import Dataset, DatasetDict
 import os
+from typing import List, Dict, Tuple, Optional
 
 
-def txt_file_to_list(file_path):
+def txt_file_to_list(file_path: str) -> List[str]:
+    """
+    Reads a text file and returns its contents as a list of lines.
+    """
     with open(file_path, "r") as file:
         return file.read().splitlines()
 
 
-def build_context_pronoun_list(templates, professions, pronoun_choices, prompt_beginning, space_symbol):
+def build_context_pronoun_list(
+    templates: List[str],
+    professions: List[str],
+    pronoun_choices: Dict[str, List[str]],
+    prompt_beginning: str,
+    space_symbol: str,
+) -> Tuple[List[str], List[List[str]]]:
     """
-    For each template + profession, build a row with:
-      - 'context'
-      - 'pronoun_list'
-    Returns two parallel lists (contexts, pronoun_lists).
+    Generates contexts and corresponding pronoun lists for each combination of template and profession.
     """
     contexts = []
     pronoun_lists = []
 
     for template in templates:
-        # 1. Find the {pronoun_...} placeholder
         pronoun_idx = template.find("{pronoun_")
         if pronoun_idx == -1:
-            # If no pronoun placeholder found, skip or handle differently
             continue
 
         pronoun_start = pronoun_idx + 1
         pronoun_end = pronoun_idx + 10
-        pronoun_key = template[pronoun_start:pronoun_end]  # e.g. 'pronoun_m'
+        pronoun_key = template[pronoun_start:pronoun_end]
 
-        # 2. Remove that placeholder from the template for direct formatting
-        #    This is just one approach; you might need more logic if you have more placeholders.
         template_stripped = template[:pronoun_idx].strip()
 
-        # 3. Build context & pronoun_list for each profession
         for profession in professions:
-            # Build the text
             prof_lower = profession.lower()
             context_text = prompt_beginning.format(profession=prof_lower) + template_stripped.format(
                 profession=prof_lower
             )
 
-            # Lookup the pronoun list
             pronoun_list = pronoun_choices[pronoun_key]
 
-            # Capitalize if the context ends with a period
             if context_text.endswith("."):
                 pronoun_list = [p.capitalize() for p in pronoun_list]
 
-            # Prepend space symbol
             pronoun_list = [space_symbol + p for p in pronoun_list]
 
             contexts.append(context_text)
@@ -58,19 +56,17 @@ def build_context_pronoun_list(templates, professions, pronoun_choices, prompt_b
 
 
 def prepare_dataset_gender(
-    dataset_config_path,
-    template_path,
-    train_share=0.8,
-    validation_share=0.1,
-    space_symbol="Ġ",
-    print_dataset_info=False,
-    reduced_number_of_train_templates=None,
-):
+    dataset_config_path: str,
+    template_path: str,
+    train_share: float = 0.8,
+    validation_share: float = 0.1,
+    space_symbol: str = "Ġ",
+    print_dataset_info: bool = False,
+    reduced_number_of_train_templates: Optional[int] = None,
+) -> DatasetDict:
     """
-    Reads config & templates, splits them, then builds a DatasetDict
-    with train/validation/test. Each split contains columns:
-      - "context"
-      - "pronoun_list"
+    Creates a gender-specific dataset by reading configuration and template files, splitting the data into training,
+    validation, and test sets, and organizing them into a DatasetDict.
     """
     dataset_config = read_config(dataset_config_path)
     templates = txt_file_to_list(template_path)
@@ -148,7 +144,12 @@ def prepare_dataset_gender(
     return dataset_dict
 
 
-def prepare_dataset_gender_stories(stories_path, reduced_number_of_stories_per_profession=None):
+def prepare_dataset_gender_stories(
+    stories_path: str, reduced_number_of_stories_per_profession: Optional[int] = None
+) -> DatasetDict:
+    """
+    Generates a dataset from story files, organizing instructions and responses based on professions.
+    """
     file_paths = os.listdir(stories_path)
     instructions_list = []
     responses_list = []

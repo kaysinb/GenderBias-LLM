@@ -3,11 +3,13 @@ import torch.nn as nn
 import numpy as np
 from transformers import Trainer
 from collections import defaultdict
+from typing import Any, Dict, Optional, List, Union, Tuple
 
 
 class GenderLossTrainer(Trainer):
     """
-    A custom trainer that uses `gender_loss` in the standard compute_loss flow.
+    A custom trainer that integrates a gender-specific loss component into the training process.
+    Inherits from Hugging Face's Trainer class.
     """
 
     def __init__(self, *args, **kwargs):
@@ -19,10 +21,11 @@ class GenderLossTrainer(Trainer):
         self.p_total_power = kwargs.pop("p_total_power", 1.0)
         super().__init__(*args, **kwargs)
 
-    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
+    def compute_loss(
+        self, model: nn.Module, inputs: Dict[str, torch.Tensor], return_outputs: bool = False, **kwargs
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Any]]:
         """
-        Overrides the default compute_loss to incorporate your custom `gender_loss`.
-        Accepts arbitrary keyword arguments to maintain compatibility.
+        Computes the combined loss consisting of standard loss and gender-specific loss.
         """
         inputs_standard = defaultdict(list)
         inputs_gender = defaultdict(list)
@@ -66,7 +69,12 @@ class GenderLossTrainer(Trainer):
 
         return (loss, outputs_standard) if return_outputs else loss
 
-    def custom_compute_loss(self, model, inputs, return_outputs=False, **kwargs):
+    def custom_compute_loss(
+        self, model: nn.Module, inputs: Dict[str, torch.Tensor], return_outputs: bool = False, **kwargs
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Any]]:
+        """
+        Computes the gender-specific loss.
+        """
         labels = inputs.pop("labels")
         outputs = model(**inputs)
 
@@ -85,9 +93,11 @@ class GenderLossTrainer(Trainer):
 
         return (loss, outputs) if return_outputs else loss
 
-    def gender_loss(self, model, input_ids, attention_mask, labels):
+    def gender_loss(
+        self, model: nn.Module, input_ids: torch.Tensor, attention_mask: torch.Tensor, labels: torch.Tensor
+    ) -> torch.Tensor:
         """
-        Compute the difference between logP("he/his...") and logP("she/her...") on the next token.
+        Computes the difference in probabilities between male and female pronouns.
         """
         outputs = model(input_ids=input_ids, attention_mask=attention_mask)
         logits = outputs.logits  # [batch_size, seq_len, vocab_size]
@@ -110,17 +120,21 @@ class GenderLossTrainer(Trainer):
 
         return diff_loss.mean()
 
-    def should_log(self):
+    def should_log(self) -> bool:
         """
         Determines whether logging should occur based on the current step and logging_steps.
         """
-        # Access the global step from the Trainer's state
         global_step = self.state.global_step
         return self.args.logging_steps > 0 and global_step % self.args.logging_steps == 0 and global_step > 1
 
-    def evaluate(self, eval_dataset=None, ignore_keys=None, metric_key_prefix: str = "eval"):
+    def evaluate(
+        self,
+        eval_dataset: Optional[Any] = None,
+        ignore_keys: Optional[List[str]] = None,
+        metric_key_prefix: str = "eval",
+    ) -> Dict[str, float]:
         """
-        Overrides the default evaluate method to compute loss using custom compute loss.
+        Evaluates the model on the provided evaluation dataset using the custom loss computation.
         """
         self.p_total_logs = []
 
@@ -135,7 +149,6 @@ class GenderLossTrainer(Trainer):
             pin_memory=self.args.dataloader_pin_memory,
         )
 
-        # Initialize metrics
         total_loss = 0
         num_batches = 0
 
@@ -143,7 +156,6 @@ class GenderLossTrainer(Trainer):
         model.eval()
 
         for step, inputs in enumerate(eval_dataloader):
-            # Move inputs to the model's device
             inputs = {k: v.to(model.device) if hasattr(v, "to") else v for k, v in inputs.items()}
 
             with torch.no_grad():
