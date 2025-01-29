@@ -12,7 +12,7 @@ lora_train_config:
   - "v_proj"
   layer_numbers:
     start: 0
-    end: 2
+    end: 6
 
-lambda_gender: 1.5
+lambda_gender: 2
 p_total_power: 1.3
